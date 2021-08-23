@@ -24,16 +24,18 @@ public enum BackgroundStyle {
 
 public enum CardPosition: CGFloat {
     
-    case bottom , middle, top
+    case bottom(CGFloat?)
+    case middle(CGFloat?)
+    case top(CGFloat?)
     
     func offsetFromTop() -> CGFloat {
         switch self {
-        case .bottom:
-            return UIScreen.main.bounds.height - 80
-        case .middle:
-            return UIScreen.main.bounds.height/1.8
-        case .top:
-            return 80
+        case .bottom(let height):
+            return height ?? UIScreen.main.bounds.height - 80
+        case .middle(let height):
+            return height ?? UIScreen.main.bounds.height/1.8
+        case .top(let height):
+            return height ?? 80
         }
     }
 }
