@@ -5,16 +5,34 @@ import SwiftUI
 public struct SlideOverCard<Content> : View where Content : View {
     @Binding var defaultPosition : CardPosition
     @Binding var backgroundStyle: BackgroundStyle
+    var offsetFromTop: (CardPosition) -> CGFloat
     var content: () -> Content
     
+    public init(_ position: Binding<CardPosition> = .constant(.middle), backgroundStyle: Binding<BackgroundStyle> = .constant(.solid), offsetFromTop: @escaping (CardPosition) -> CGFloat, content: @escaping () -> Content) {
+        self.content = content
+        self._defaultPosition = position
+        self._backgroundStyle = backgroundStyle
+        self.offsetFromTop = offsetFromTop
+    }
+
     public init(_ position: Binding<CardPosition> = .constant(.middle), backgroundStyle: Binding<BackgroundStyle> = .constant(.solid), content: @escaping () -> Content) {
         self.content = content
         self._defaultPosition = position
         self._backgroundStyle = backgroundStyle
+        self.offsetFromTop = { position in
+            switch position {
+                case .bottom:
+                    return UIScreen.main.bounds.height - 80
+                case .middle:
+                    return UIScreen.main.bounds.height/1.8
+                case .top:
+                    return 80
+            }
+        }
     }
      
     public var body: some View {
-        ModifiedContent(content: self.content(), modifier: Card(position: self.$defaultPosition, backgroundStyle: self.$backgroundStyle))
+        ModifiedContent(content: self.content(), modifier: Card(position: self.$defaultPosition, backgroundStyle: self.$backgroundStyle, offsetFromTop: offsetFromTop))
        }
 }
 
@@ -23,19 +41,13 @@ public enum BackgroundStyle {
 }
 
 public enum CardPosition: CGFloat {
-    
     case bottom , middle, top
-    
-    func offsetFromTop() -> CGFloat {
-        switch self {
-        case .bottom:
-            return UIScreen.main.bounds.height - 80
-        case .middle:
-            return UIScreen.main.bounds.height/1.8
-        case .top:
-            return 80
-        }
-    }
+}
+
+protocol CardPositionProtocol {
+    var value: CardPosition { get set }
+
+    func offsetFromTop() -> CGFloat
 }
 
 enum DragState {
@@ -69,8 +81,10 @@ struct Card: ViewModifier {
     @GestureState var dragState: DragState = .inactive
     @Binding var position : CardPosition
     @Binding var backgroundStyle: BackgroundStyle
+    var offsetFromTop: (CardPosition) -> CGFloat
     @State var offset: CGSize = CGSize.zero
-    
+
+
     var animation: Animation {
         Animation.interpolatingSpring(stiffness: 300.0, damping: 30.0, initialVelocity: 10.0)
     }
@@ -114,7 +128,7 @@ struct Card: ViewModifier {
             .mask(RoundedRectangle(cornerRadius: 20, style: .continuous))
             .scaleEffect(x: 1, y: 1, anchor: .center)
         }
-        .offset(y:  max(0, self.position.offsetFromTop() + self.dragState.translation.height))
+        .offset(y:  max(0, offsetFromTop(self.position) + self.dragState.translation.height))
         .animation((self.dragState.isDragging ? nil : animation))
         .gesture(drag)
     }
@@ -130,10 +144,10 @@ struct Card: ViewModifier {
         
         // Determining the direction of the drag gesture and its distance from the top
         let dragDirection = drag.predictedEndLocation.y - drag.location.y
-        let offsetFromTopOfView = position.offsetFromTop() + drag.translation.height
+        let offsetFromTopOfView = offsetFromTop(position) + drag.translation.height
         
         // Determining whether drawer is above or below `.partiallyRevealed` threshold for snapping behavior.
-        if offsetFromTopOfView <= CardPosition.middle.offsetFromTop() {
+        if offsetFromTopOfView <= offsetFromTop(CardPosition.middle) {
             higherStop = .top
             lowerStop = .middle
         } else {
@@ -142,7 +156,7 @@ struct Card: ViewModifier {
         }
         
         // Determining whether drawer is closest to top or bottom
-        if (offsetFromTopOfView - higherStop.offsetFromTop()) < (lowerStop.offsetFromTop() - offsetFromTopOfView) {
+        if (offsetFromTopOfView - offsetFromTop(higherStop)) < (offsetFromTop(lowerStop) - offsetFromTopOfView) {
             nearestPosition = higherStop
         } else {
             nearestPosition = lowerStop
